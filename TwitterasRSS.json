@@ -1,0 +1,435 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 12
+            }
+          ]
+        },
+        "feedUrl": "https://nitter.privacyredirect.com/yourXid/rss"
+      },
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -16
+      ],
+      "id": "482ff6cb-e7d6-4cf5-a4b9-7c614643ba1c",
+      "name": "RSS Feed Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 处理RSS输出中的推文内容和图片\nconst items = $input.all();\nconst processedItems = [];\n\nitems.forEach((item, index) => {\nconst data = item.json;\n\n// 提取纯文本内容（去除HTML标签）\nlet textContent = '';\nif (data.contentSnippet) {\n  // 使用contentSnippet作为纯文本内容\n  textContent = data.contentSnippet;\n} else if (data.content) {\n  // 如果没有contentSnippet，从content中提取\n  textContent = data.content\n    .replace(/<[^>]*>/g, '') // 移除HTML标签\n    .replace(/\\s+/g, ' ') // 合并多个空格\n    .trim();\n}\n\n// 提取图片URL\nlet imageUrl = '';\nif (data.content) {\n  const imgMatch = data.content.match(/<img[^>]+src=\"([^\"]+)\"/);\n  if (imgMatch) {\n    imageUrl = imgMatch[1];\n  }\n}\n\n// 提取链接\nlet extractedLinks = [];\nif (data.content) {\n  const linkMatches = data.content.match(/<a[^>]+href=\"([^\"]+)\"/g);\n  if (linkMatches) {\n    extractedLinks = linkMatches.map(match => {\n      const urlMatch = match.match(/href=\"([^\"]+)\"/);\n      return urlMatch ? urlMatch[1] : '';\n    }).filter(url => url && !url.includes('nitter.privacyredirect.com'));\n  }\n}\n\n// 清理和格式化文本内容\nconst cleanText = textContent\n  .replace(/\\\\n/g, '\\n') // 转换换行符\n  .replace(/\\n\\s*\\n/g, '\\n') // 移除多余空行\n  .trim();\n\n// 提取hashtags和mentions\nconst hashtags = cleanText.match(/#\\w+/g) || [];\nconst mentions = cleanText.match(/@\\w+/g) || [];\n\n// 构建处理后的数据对象\nconst processedItem = {\n  // 原始数据\n  originalTitle: data.title || '',\n  creator: data.creator || data['dc:creator'] || '',\n  pubDate: data.pubDate || '',\n  isoDate: data.isoDate || '',\n  guid: data.guid || '',\n  link: data.link || '',\n  \n  // 处理后的内容\n  cleanText: cleanText,\n  textLength: cleanText.length,\n  wordCount: cleanText.split(/\\s+/).filter(word => word.length > 0).length,\n  \n  // 媒体内容\n  imageUrl: imageUrl,\n  hasImage: !!imageUrl,\n  extractedLinks: extractedLinks,\n  \n  // 社交媒体元素\n  hashtags: hashtags,\n  mentions: mentions,\n  hashtagCount: hashtags.length,\n  mentionCount: mentions.length,\n  \n  // 元数据\n  processedAt: new Date().toISOString(),\n  itemIndex: index\n};\n\nprocessedItems.push({ json: processedItem });\n});\n\nreturn processedItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -16
+      ],
+      "id": "dcc6bf18-71bb-4197-9be7-6eee52a922f4",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwq-32b:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        464,
+        304
+      ],
+      "id": "e2808f07-59bd-44b8-a776-a0233c89cb87",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "dhTD2vn6OW4LpHgB",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=你是一位专业的科学文献翻译专家，专门负责将英文科学论文标题翻译成中文。你需要遵循以下严格的翻译原则：\n\n## 翻译原则：\n1. **准确性优先**：确保科学概念和技术术语的准确传达\n2. **专业术语保留**：保持特定的专有名词不变，包括但不限于：\n - 模型名称（如AlphaFold、BERT、GPT等）\n - 算法名称（如SAPP、DMX、VAE等）\n - 细胞/蛋白质名称（如AKT1、MCL1等）\n - 技术缩写（如AI、ML、DL、NLP等）\n - 数据库名称（如ChEMBL、ZINC等）\n - 期刊名称和标识符\n\n3. **术语一致性**：使用标准的中文科学术语翻译\n4. **语言流畅性**：确保中文表达自然流畅，符合中文科技文献的表达习惯\n5. **格式保持**：保留原文的标点符号和格式结构\n\n## 常用术语对照表：\n- Machine Learning → 机器学习\n- Deep Learning → 深度学习\n- Artificial Intelligence → 人工智能\n- Neural Network → 神经网络\n- Protein Design → 蛋白质设计\n- Drug Discovery → 药物发现\n- Molecular → 分子的/分子\n- Computational Biology → 计算生物学\n- Bioinformatics → 生物信息学\n- Dataset → 数据集\n- Benchmark → 基准测试\n- Framework → 框架\n- Algorithm → 算法\n- Model → 模型\n- Optimization → 优化\n- Prediction → 预测\n\n请直接输出{{ $json.originalTitle }}的翻译结果，同时总结一个15个字以内的标题，正文中不要添加任何解释或说明,请注意将正文中#hashtag后面的内容也根据翻译原则进行翻译\n## 输出格式要求：\n请严格按照以下JSON格式输出结果，不要包含任何其他内容：\n\n{\n  \"title\": \"根据内容生成的15个字以内的标题\",\n  \"content\": \" {{ $json.originalTitle }}的翻译结果\"\n}\n",
+        "options": {
+          "systemMessage": ""
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        96
+      ],
+      "id": "9df3c156-1cde-429c-a2ac-6a2656a12afb",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 修复JSON解析问题的版本 - 移除picsUrl\nconst items = $input.all();\nconst processedItems = [];\n\nitems.forEach((item, index) => {\ntry {\n// 获取原始输出\nlet rawOutput = item.json.output || '';\n\nconsole.log(`Processing item ${index}`);\n\n// 移除<think>...</think>块\nlet cleanedOutput = rawOutput.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n\n// 提取JSON内容\nlet jsonBlockMatch = cleanedOutput.match(/```json\\s*([\\s\\S]*?)\\s*```/i);\n\nif (!jsonBlockMatch) {\n  // 尝试直接匹配JSON结构\n  jsonBlockMatch = cleanedOutput.match(/(\\{[\\s\\S]*\\})/);\n}\n\nlet jsonResult = null;\nif (jsonBlockMatch) {\n  try {\n    let jsonString = jsonBlockMatch[1].trim();\n    \n    // 修复JSON字符串中的控制字符问题\n    // 1. 先处理字符串字段中的换行符和特殊字符\n    jsonString = jsonString\n      .replace(/\\\\n/g, '\\\\n')  // 保持已转义的换行符\n      .replace(/\\n/g, '\\\\n')   // 转义未转义的换行符\n      .replace(/\\r/g, '\\\\r')   // 转义回车符\n      .replace(/\\t/g, '\\\\t')   // 转义制表符\n      .replace(/\\\\/g, '\\\\\\\\')  // 转义反斜杠\n      .replace(/\"/g, '\\\\\"');   // 转义双引号\n    \n    // 2. 重新构建正确的JSON结构\n    // 由于上面的替换可能过度转义，我们需要更精确的方法\n    \n    // 重新匹配并手动构建JSON - 只匹配title和content\n    const titleMatch = jsonBlockMatch[1].match(/\"title\":\\s*\"([^\"]*(?:\\\\.[^\"]*)*)\"/);\n    const contentMatch = jsonBlockMatch[1].match(/\"content\":\\s*\"([\\s\\S]*?)\"/);\n    \n    if (titleMatch && contentMatch) {\n      // 手动构建结果对象，避免JSON.parse的控制字符问题\n      jsonResult = {\n        title: titleMatch[1].replace(/\\\\\"/g, '\"').replace(/\\\\n/g, '\\n').replace(/\\\\r/g, '\\r').replace(/\\\\t/g, '\\t'),\n        content: contentMatch[1].replace(/\\\\\"/g, '\"').replace(/\\\\n/g, '\\n').replace(/\\\\r/g, '\\r').replace(/\\\\t/g, '\\t')\n      };\n      \n      console.log(`Successfully extracted data for item ${index}`);\n    } else {\n      throw new Error('无法匹配JSON字段');\n    }\n    \n  } catch (e) {\n    console.error(`Failed to parse JSON for item ${index}:`, e.message);\n    throw new Error('JSON解析失败: ' + e.message);\n  }\n} else {\n  throw new Error('未找到JSON代码块');\n}\n\nif (jsonResult) {\n  // 只返回title和content两个字段\n  processedItems.push({\n    json: {\n      title: jsonResult.title || '',\n      content: jsonResult.content || ''\n    }\n  });\n  \n  console.log(`Successfully processed item ${index}: \"${jsonResult.title.substring(0, 30)}...\"`);\n} else {\n  throw new Error('JSON结果为空');\n}\n\n} catch (error) {\nconsole.error(`Error processing item ${index}:`, error.message);\n\n// 错误时尝试简单的文本提取作为备选方案\ntry {\n  const rawOutput = item.json.output || '';\n  const cleanedOutput = rawOutput.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n  \n  processedItems.push({\n    json: {\n      title: '提取失败',\n      content: cleanedOutput\n    }\n  });\n} catch (fallbackError) {\n  processedItems.push({\n    json: {\n      title: '处理失败',\n      content: error.message\n    }\n  });\n}\n}\n});\n\nconsole.log(`Total processed items: ${processedItems.length}`);\nreturn processedItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        96
+      ],
+      "id": "fbeb96db-7606-4c68-834c-3ff3ca4b8909",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "04e22d04-7a92-46ce-b356-634019411d5b",
+              "leftValue": "={{ $json.imageUrl }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        304,
+        -176
+      ],
+      "id": "10679016-6f12-4149-9b80-b3e4bc48777b",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fea56c96-4c99-4b28-ad5b-8b0b2ec33286",
+              "name": "imageUrl",
+              "value": "={{ $json.imageUrl }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        624,
+        -176
+      ],
+      "id": "8d515946-e791-46f3-b44d-89b334f19506",
+      "name": "获取图片链接"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n\"Content-Type\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n\"app_id\": \"yourappid\",\n\"app_secret\": \"yourappsecret\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        832,
+        -160
+      ],
+      "id": "ecb5dfcc-439d-4ad2-b129-0b2aad61bf7b",
+      "name": "获取token"
+    },
+    {
+      "parameters": {
+        "url": "={{ \n  $('RSS Feed Trigger').item.json.content\n    .match(/https:\\/\\/nitter\\.privacyredirect\\.com\\/pic\\/media%2F([^\"]+)/)?.[1]\n    ? \"https://pbs.twimg.com/media/\" + $('RSS Feed Trigger').item.json.content.match(/https:\\/\\/nitter\\.privacyredirect\\.com\\/pic\\/media%2F([^\"]+)/)[1]\n    : $('RSS Feed Trigger').item.json.content.match(/https:\\/\\/nitter\\.privacyredirect\\.com\\/pic\\/media%2F([^\"]+)/)?.[0]\n}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "image/webp,image/apng,image/*,*/*;q=0.8"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1088,
+        -160
+      ],
+      "id": "ed15caaf-f209-4661-9c90-8944258243a1",
+      "name": "GetPics",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/im/v1/images",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "multipart/form-data; boundary=---7MA4YWxkTrZu0gW"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "image_type",
+              "value": "message"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "image",
+              "inputDataFieldName": "={{\"data\"}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1376,
+        -176
+      ],
+      "id": "19c7af4d-164d-42fd-a6bb-731fc950e7fd",
+      "name": "上传飞书",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "ALjvF8gSDeWgpZTk",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/bot/v2/hook/yourwebhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"msg_type\": \"image\",\n    \"content\": {\n        \"image_key\": \"{{ $json.data.image_key }}\"\n    }\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1632,
+        -240
+      ],
+      "id": "52e334e9-f920-4c08-82a8-8f8f606cf3db",
+      "name": "发送图片"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/bot/v2/hook/yourwebhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"msg_type\": \"post\",\n  \"content\": {\n    \"post\": {\n      \"zh_cn\": {\n        \"title\": {{ JSON.stringify($json.title || '') }},\n        \"content\": [[{\n          \"tag\": \"text\", \n          \"text\": {{ JSON.stringify($json.content || '') }}\n        }]]\n      }\n    }\n  }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1072,
+        96
+      ],
+      "id": "a9c01fe6-7029-4916-a5c7-68f2b2fc87f4",
+      "name": "发送内容文字"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Feed Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "发送内容文字",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "获取图片链接",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "获取图片链接": {
+      "main": [
+        [
+          {
+            "node": "获取token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取token": {
+      "main": [
+        [
+          {
+            "node": "GetPics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GetPics": {
+      "main": [
+        [
+          {
+            "node": "上传飞书",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "上传飞书": {
+      "main": [
+        [
+          {
+            "node": "发送图片",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1be5e841-c04c-4e68-b261-b34d1cc761a0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "69453b1ecc08a0fb908efcf1f3a5aa85b2c054913c3316f26500774c56660646"
+  },
+  "id": "3nln9QRAOHlZwnIX",
+  "tags": []
+}
